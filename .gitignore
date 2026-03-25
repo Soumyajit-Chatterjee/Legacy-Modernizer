@@ -1,0 +1,17 @@
+# Environments
+.env
+.env.local
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.idea/
+
+# Node
+node_modules/
+dist/
+build/
