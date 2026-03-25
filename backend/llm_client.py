@@ -13,29 +13,40 @@ def generate_modernized_code(context: dict, target_lang: str) -> dict:
         
     client = genai.Client()
     
+    is_fallback = context.get("is_fallback", False)
+    
     prompt = f"""
     You are an expert Legacy Code Modernization Engine.
-    Your task is to translate an isolated piece of a legacy Java application into {target_lang}.
-    
-    Target Function to modernize: {context['target_function']}
-    Code (comments stripped):
-    ```java
-    {context['target_code_stripped']}
-    ```
-    
-    Here are the immediate dependencies of this function to give you necessary context:
+    Your task is to translate an isolated piece of a legacy application into {target_lang}.
     """
     
-    for dep in context['dependencies']:
+    if is_fallback:
         prompt += f"""
-        Dependency: {dep['name']}
-        ```java
-        {dep['code_stripped']}
+        We extracted the raw COBOL bounded section relating to '{context['target_function']}'.
+        Code Context:
+        ```cobol
+        {context['target_code_stripped']}
         ```
         """
-        
+    else:
+        prompt += f"""
+        Target Function to modernize: {context['target_function']}
+        Code (comments stripped):
+        ```java
+        {context['target_code_stripped']}
+        ```
+        Here are the immediate dependencies of this function to give you necessary context:
+        """
+        for dep in context['dependencies']:
+            prompt += f"""
+            Dependency: {dep['name']}
+            ```java
+            {dep['code_stripped']}
+            ```
+            """
+            
     prompt += f"""
-    Based on the behavior of the target function and its dependencies, output the modernized equivalent of the Target Function in {target_lang}.
+    Based on the behavior of the legacy code, output the modernized equivalent in {target_lang}.
     Then, provide a suite of unit tests for the modernized code.
     
     Return exactly a JSON object with two fields:

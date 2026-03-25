@@ -17,34 +17,42 @@ def orchestrate_modernization(input_dir: str, target_lang: str, target_function:
     """
     input_path = Path(input_dir)
     java_files = list(input_path.rglob("*.java"))
+    cobol_files = list(input_path.rglob("*.cbl")) + list(input_path.rglob("*.cob")) + list(input_path.rglob("*.cpy"))
     
-    if not java_files:
-        print(f"No Java files found in {input_dir}")
+    if not java_files and not cobol_files:
+        print(f"No Java or COBOL files found in {input_dir}")
         return
 
-    # Parse all Java files and build a global method registry
+    context = None
     all_method_nodes = {}
-    for j_file in java_files:
-        try:
-            with open(j_file, 'rb') as f:
-                code_bytes = f.read()
-            
-            tree = parser.parse(code_bytes)
-            
-            print(f"Analyzing {j_file.name} to build method registry...")
-            methods = find_method_declarations(tree.root_node)
-            for m in methods:
-                name = get_method_name(m, code_bytes)
-                all_method_nodes[name] = (m, code_bytes)
+    if java_files:
+        for j_file in java_files:
+            try:
+                with open(j_file, 'rb') as f:
+                    code_bytes = f.read()
                 
-        except Exception as e:
-            print(f"Error parsing {j_file}: {e}")
+                root_node = parse_code(code_bytes)
+                
+                print(f"Analyzing {j_file.name} to build method registry...")
+                methods = find_method_declarations(root_node)
+                for m in methods:
+                    name = get_method_name(m, code_bytes)
+                    all_method_nodes[name] = (m, code_bytes)
+                
+            except Exception as e:
+                print(f"Error parsing {j_file}: {e}")
             
     try:
-        context = build_optimized_context(target_function, all_method_nodes)
-        print(f"Found '{target_function}' in repository. Context optimized.")
-    except ValueError:
-        print(f"Target function '{target_function}' could not be found in any parsed Java files.")
+        if java_files:
+            context = build_optimized_context(target_function, all_method_nodes)
+            print(f"Found '{target_function}' in repository. AST Context optimized.")
+        elif cobol_files:
+            from backend.fallback_parser import build_fallback_context
+            context = build_fallback_context(target_function, [str(f) for f in cobol_files])
+            print(f"Found '{target_function}' in COBOL repository. Fallback context bounded.")
+            
+    except ValueError as e:
+        print(e)
         raise ValueError(f"Target function '{target_function}' not found in repository.")
         
     print(f"Dependencies mapped: {[d['name'] for d in context['dependencies']]}")
