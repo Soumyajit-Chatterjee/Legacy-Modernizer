@@ -2,11 +2,12 @@ import { useState } from 'react'
 import './index.css'
 
 function App() {
-  const [inputType, setInputType] = useState('code'); // 'code' or 'github'
+  const [inputType, setInputType] = useState('code'); // 'code' or 'gitHub'
   const [githubUrl, setGithubUrl] = useState('');
   const [legacyCode, setLegacyCode] = useState('// Paste Legacy Java Code Here\n');
   const [targetFunction, setTargetFunction] = useState('');
   const [targetLang, setTargetLang] = useState('python');
+  const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
   
   const [modernizedCode, setModernizedCode] = useState('');
   const [unitTests, setUnitTests] = useState('');
@@ -25,7 +26,7 @@ function App() {
     setError('');
     
     try {
-      let endpoint = 'http://localhost:8000/api/modernize';
+      let endpoint = `${apiBaseUrl}/api/modernize`;
       let payload = {
         target_function: targetFunction,
         target_lang: targetLang
@@ -37,7 +38,7 @@ function App() {
           setIsLoading(false);
           return;
         }
-        endpoint = 'http://localhost:8000/api/modernize/github';
+        endpoint = `${apiBaseUrl}/api/modernize/github`;
         payload.github_url = githubUrl;
       } else {
         payload.legacy_code = legacyCode;
@@ -53,7 +54,8 @@ function App() {
       
       if (!response.ok) {
         let errData;
-        try { errData = await response.json(); } catch(e) {}
+        // eslint-disable-next-line no-unused-vars
+        try { errData = await response.json(); } catch(e) { /* empty */ }
         throw new Error(errData?.detail || 'Failed to modernize code');
       }
       

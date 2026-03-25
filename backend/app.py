@@ -2,9 +2,12 @@ from dotenv import load_dotenv
 load_dotenv(".env.local")
 load_dotenv()
 
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from fastapi.responses import FileResponse
 from backend.parser import parser, find_method_declarations
 from backend.context_optimizer import build_optimized_context, get_method_name
 from backend.llm_client import generate_modernized_code
@@ -64,3 +67,43 @@ def modernize_from_github(request: GithubModernizeRequest):
         return {"modernized_code": data.get("modernized_code", ""), "unit_tests": data.get("unit_tests", "")}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---- Frontend (Vite/React) static hosting ----
+# When deployed with the built frontend present at `frontend/dist`,
+# serve it from the same Render service as the API.
+BASE_DIR = Path(__file__).resolve().parent.parent
+FRONTEND_DIST_DIR = BASE_DIR / "frontend" / "dist"
+
+
+@app.get("/", include_in_schema=False)
+def serve_frontend_root():
+    index_path = FRONTEND_DIST_DIR / "index.html"
+    if not index_path.is_file():
+        raise HTTPException(
+            status_code=503,
+            detail="Frontend not built. Run `npm run build --prefix frontend`.",
+        )
+    return FileResponse(index_path)
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def serve_frontend_assets_and_spa(full_path: str):
+    # Preserve FastAPI routes (/docs, /openapi.json, etc.) and API endpoints.
+    if full_path.startswith("api/") or full_path in {"docs", "redoc", "openapi.json"}:
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    # If the requested file exists in the built frontend, serve it.
+    requested_path = FRONTEND_DIST_DIR / full_path
+    if requested_path.is_file():
+        return FileResponse(requested_path)
+
+    # SPA fallback: serve index.html for routes handled client-side.
+    index_path = FRONTEND_DIST_DIR / "index.html"
+    if index_path.is_file():
+        return FileResponse(index_path)
+
+    raise HTTPException(
+        status_code=503,
+        detail="Frontend not built. Run `npm run build --prefix frontend`.",
+    )
