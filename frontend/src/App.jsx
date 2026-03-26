@@ -4,7 +4,7 @@ import './index.css'
 function App() {
   const [inputType, setInputType] = useState('code'); // 'code' or 'gitHub'
   const [githubUrl, setGithubUrl] = useState('');
-  const [legacyCode, setLegacyCode] = useState('// Paste Legacy Java Code Here\n');
+  const [legacyCode, setLegacyCode] = useState('// Paste Legacy Java or Cobol Code Here\n');
   const [targetFunction, setTargetFunction] = useState('');
   const [targetLang, setTargetLang] = useState('python');
   // In production, backend typically serves UI and API from the same origin.
