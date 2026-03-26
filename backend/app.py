@@ -3,6 +3,9 @@ load_dotenv(".env.local")
 load_dotenv()
 
 from pathlib import Path
+import os
+import shutil
+import subprocess
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -100,15 +103,57 @@ def modernize_from_github(request: GithubModernizeRequest):
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIST_DIR = BASE_DIR / "frontend" / "dist"
 
+def _frontend_index_path() -> Path:
+    return FRONTEND_DIST_DIR / "index.html"
+
+
+def ensure_frontend_built() -> None:
+    """
+    Ensure the Vite production bundle exists.
+
+    In a correctly configured Docker build, this should already be present.
+    If the service was deployed without building the frontend, we try to build
+    it on-demand (only if `npm` is available).
+    """
+    if _frontend_index_path().is_file():
+        return
+
+    npm_path = shutil.which("npm")
+    if not npm_path:
+        raise RuntimeError("Frontend not built and `npm` is not available in this environment.")
+
+    frontend_dir = BASE_DIR / "frontend"
+    if not (frontend_dir / "package.json").is_file():
+        raise RuntimeError("Frontend source not found in expected location.")
+
+    # Build frontend bundle in place.
+    # Note: this is best-effort; if it fails, we surface a clear 503 message.
+    subprocess.run(
+        ["npm", "ci"],
+        cwd=str(frontend_dir),
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    subprocess.run(
+        ["npm", "run", "build"],
+        cwd=str(frontend_dir),
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+
 
 @app.get("/", include_in_schema=False)
 def serve_frontend_root():
     index_path = FRONTEND_DIST_DIR / "index.html"
     if not index_path.is_file():
-        raise HTTPException(
-            status_code=503,
-            detail="Frontend not built. Run `npm run build --prefix frontend`.",
-        )
+        try:
+            ensure_frontend_built()
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=str(e))
     return FileResponse(index_path)
 
 
@@ -128,7 +173,13 @@ def serve_frontend_assets_and_spa(full_path: str):
     if index_path.is_file():
         return FileResponse(index_path)
 
-    raise HTTPException(
-        status_code=503,
-        detail="Frontend not built. Run `npm run build --prefix frontend`.",
-    )
+    try:
+        ensure_frontend_built()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    # After build, index.html should exist.
+    if index_path.is_file():
+        return FileResponse(index_path)
+
+    raise HTTPException(status_code=503, detail="Frontend build completed but index.html is still missing.")
