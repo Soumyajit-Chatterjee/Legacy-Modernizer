@@ -17,6 +17,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Git is required at runtime because the backend uses `git clone` to ingest GitHub repos.
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+
 COPY backend ./backend
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
