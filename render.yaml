@@ -1,0 +1,12 @@
+services:
+  - type: web
+    runtime: docker
+    name: legacy-modernizer
+    plan: free
+    dockerfilePath: Dockerfile
+    dockerContext: .
+    healthCheckPath: /
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false # prompt for value in Render dashboard
+

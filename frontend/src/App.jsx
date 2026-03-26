@@ -7,7 +7,10 @@ function App() {
   const [legacyCode, setLegacyCode] = useState('// Paste Legacy Java Code Here\n');
   const [targetFunction, setTargetFunction] = useState('');
   const [targetLang, setTargetLang] = useState('python');
-  const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+  // In production, backend typically serves UI and API from the same origin.
+  // In local dev, people usually run FastAPI separately on :8000.
+  const configuredApiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+  const apiBaseUrl = configuredApiBaseUrl || (import.meta.env.DEV ? 'http://localhost:8000' : '');
   
   const [modernizedCode, setModernizedCode] = useState('');
   const [unitTests, setUnitTests] = useState('');

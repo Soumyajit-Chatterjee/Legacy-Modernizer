@@ -8,8 +8,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from fastapi.responses import FileResponse
-from backend.parser import parser, find_method_declarations
-from backend.context_optimizer import build_optimized_context, get_method_name
 from backend.llm_client import generate_modernized_code
 from backend.orchestrator import orchestrate_github_modernization
 import json
@@ -33,19 +31,46 @@ class ModernizeRequest(BaseModel):
 def modernize(request: ModernizeRequest):
     code_bytes = request.legacy_code.encode("utf-8")
     
+    context = None
+    java_exc: Exception | None = None
     try:
-        tree = parser.parse(code_bytes)
-        methods = find_method_declarations(tree.root_node)
+        # Import Java parsing components lazily so COBOL fallback can work even
+        # if tree-sitter Java dependencies are missing.
+        from backend.parser import parse_code, find_method_declarations
+        from backend.context_optimizer import build_optimized_context, get_method_name
+
+        root_node = parse_code(code_bytes)
+        methods = find_method_declarations(root_node)
         all_method_nodes = {}
         for m in methods:
             name = get_method_name(m, code_bytes)
             all_method_nodes[name] = (m, code_bytes)
-            
+
         context = build_optimized_context(request.target_function, all_method_nodes)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Parsing error: {e}")
+        java_exc = e
+
+    # If Java path didn't produce a context, attempt COBOL/regex fallback.
+    if context is None:
+        from backend.fallback_parser import build_fallback_context_from_text
+
+        try:
+            context = build_fallback_context_from_text(
+                target_function=request.target_function,
+                content=request.legacy_code,
+            )
+        except ValueError as fallback_err:
+            # Prefer fallback error (usually "target not found in provided code"),
+            # but include the Java parsing reason for debugging.
+            detail = str(fallback_err)
+            if java_exc is not None:
+                detail = f"{detail}. (Java parse error: {java_exc})"
+            raise HTTPException(status_code=400, detail=detail)
+        except Exception as fallback_exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Java parse failed and fallback failed: {java_exc}; fallback error: {fallback_exc}",
+            )
         
     try:
         response_text = generate_modernized_code(context, request.target_lang)
